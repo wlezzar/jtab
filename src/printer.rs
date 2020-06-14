@@ -2,6 +2,8 @@ use std::error::Error;
 
 use prettytable::{Cell, Row, Table};
 use serde_json::Value;
+use yaml_rust::{Yaml, YamlEmitter};
+use yaml_rust::yaml::{Array, Hash};
 
 type GenericResult<T> = Result<T, Box<dyn Error>>;
 
@@ -12,37 +14,39 @@ pub trait Printer {
 #[derive(Default)]
 pub struct TablePrinter;
 
+fn json_to_yaml(value: &Value) -> Yaml {
+    match value {
+        Value::Object(obj) => {
+            let mut hash = Hash::new();
+            for (key, value) in obj {
+                hash.insert(Yaml::String(key.to_owned()), json_to_yaml(value));
+            }
+            Yaml::Hash(hash)
+        }
+        Value::Array(arr) => {
+            let arr = arr.iter().map(|e| json_to_yaml(e)).collect::<Vec<_>>();
+            Yaml::Array(Array::from(arr))
+        }
+        Value::Null => Yaml::Null,
+        Value::Bool(e) => Yaml::Boolean(e.to_owned()),
+        Value::Number(n) => Yaml::Real(format!("{}", n)),
+        Value::String(s) => Yaml::String(s.to_owned())
+    }
+}
+
 impl TablePrinter {
-    fn pprint_table_cell(value: &Value, depth: usize) -> GenericResult<String> {
+    fn pprint_table_cell(value: &Value) -> GenericResult<String> {
         match value {
-            Value::Object(obj) => {
-                let mut res = String::new();
-                for (key, value) in obj {
-                    res.push_str(
-                        format!(
-                            "{}: {}",
-                            key, TablePrinter::pprint_table_cell(value, depth + 1)?
-                        ).as_str()
-                    );
-                    if depth < 1 {
-                        res.push_str("\n")
-                    }
-                }
-                Ok(res)
-            }
-            Value::Array(arr) => {
-                let mut res = String::new();
-                for value in arr {
-                    res.push_str(
-                        format!(
-                            "{:indent$}- {}",
-                            TablePrinter::pprint_table_cell(value, depth + 1)?, indent = depth
-                        ).as_str()
-                    );
-                }
-                Ok(res)
-            }
             Value::String(s) => Ok(s.to_string()),
+            Value::Object(_) | Value::Array(_) => {
+                let mut res = String::new();
+                {
+                    let yaml_form = json_to_yaml(value);
+                    let mut emitter = YamlEmitter::new(&mut res);
+                    emitter.dump(&yaml_form)?;
+                }
+                Ok(res.trim_start_matches("---\n").to_string())
+            }
             _ => Ok(serde_json::to_string(value)?)
         }
     }
@@ -62,7 +66,11 @@ impl TablePrinter {
                     table.add_row(
                         header
                             .iter()
-                            .map(|h| TablePrinter::pprint_table_cell(row.get(h).unwrap_or(&Value::Null), 0).expect("don't know why it failed!"))
+                            .map(|h| {
+                                let h = row.get(h).unwrap_or(&Value::Null);
+                                TablePrinter::pprint_table_cell(h)
+                                    .expect("don't know why it failed!")
+                            })
                             .map(|v| Cell::new(v.as_str()))
                             .collect()
                     );
@@ -74,7 +82,8 @@ impl TablePrinter {
                     table.add_row(
                         Row::new(
                             vec![
-                                Cell::new(&TablePrinter::pprint_table_cell(row, 0).expect("don't know why it failed!"))
+                                Cell::new(&TablePrinter::pprint_table_cell(row)
+                                    .expect("don't know why it failed!"))
                             ]
                         )
                     );
@@ -101,6 +110,6 @@ struct JsonPrinter;
 
 impl Printer for JsonPrinter {
     fn print(&self, value: &Value) {
-        println!("{}", serde_json::to_string(value).expect("json value is always stringifiable"))
+        println!("{}", serde_json::to_string(value).expect("json value should always be stringifiable"))
     }
 }
