@@ -185,6 +185,7 @@ dependencies = [
  "prettytable-rs",
  "serde_json",
  "structopt",
+ "term",
  "yaml-rust",
 ]
 

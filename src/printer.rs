@@ -1,14 +1,64 @@
 use std::error::Error;
 
-use prettytable::{Cell, Row, Table};
+use prettytable::{Attr, Cell, color, Row, Table};
 use serde_json::Value;
 use yaml_rust::{Yaml, YamlEmitter};
 use yaml_rust::yaml::{Array, Hash};
 
 type GenericResult<T> = Result<T, Box<dyn Error>>;
 
+pub enum TableHeader {
+    NamedFields { fields: Vec<String> },
+    SingleUnnamedColumn,
+}
+
+pub struct JsonTable {
+    headers: TableHeader,
+    values: Vec<Vec<Value>>,
+}
+
+impl JsonTable {
+    pub fn new(headers: Option<TableHeader>, root: &Value) -> JsonTable {
+        let rows: Vec<Value> = match root {
+            Value::Array(arr) => arr.to_owned(), // TODO: is it possible to avoid cloning here?
+            _ => vec![root.to_owned()]
+        };
+
+        let headers = headers.unwrap_or_else(|| infer_headers(&rows));
+        let mut values = Vec::new();
+
+        match &headers {
+            TableHeader::NamedFields { fields } => {
+                for row in rows {
+                    values.push(
+                        fields
+                            .iter()
+                            .map(|h| row.get(h).unwrap_or(&Value::Null).to_owned())
+                            .collect()
+                    )
+                }
+            }
+            TableHeader::SingleUnnamedColumn => {
+                for row in rows {
+                    values.push(vec![row.to_owned()])
+                }
+            }
+        }
+        JsonTable { headers, values }
+    }
+}
+
+fn infer_headers(arr: &Vec<Value>) -> TableHeader {
+    match arr.first() {
+        Some(Value::Object(obj)) => TableHeader::NamedFields {
+            fields: obj.keys().map(|h| h.to_owned()).collect()
+        },
+        _ => TableHeader::SingleUnnamedColumn,
+    }
+}
+
 pub trait Printer {
-    fn print(&self, value: &Value);
+    fn print(&self, data: &JsonTable) -> GenericResult<()>;
 }
 
 #[derive(Default)]
@@ -50,66 +100,38 @@ impl TablePrinter {
             _ => Ok(serde_json::to_string(value)?)
         }
     }
-
-    fn print_arr(arr: &Vec<Value>) {
-        let mut table = Table::new();
-        match arr.first() {
-            Some(Value::Object(obj)) => {
-                let header: Vec<&String> = obj.keys().collect();
-                table.add_row(
-                    header
-                        .iter()
-                        .map(|h| Cell::new(h))
-                        .collect()
-                );
-                for row in arr {
-                    table.add_row(
-                        header
-                            .iter()
-                            .map(|h| {
-                                let h = row.get(h).unwrap_or(&Value::Null);
-                                TablePrinter::pprint_table_cell(h)
-                                    .expect("don't know why it failed!")
-                            })
-                            .map(|v| Cell::new(v.as_str()))
-                            .collect()
-                    );
-                }
-            }
-            Some(_) => {
-                table.add_row(Row::new(vec![Cell::new("value")]));
-                for row in arr {
-                    table.add_row(
-                        Row::new(
-                            vec![
-                                Cell::new(&TablePrinter::pprint_table_cell(row)
-                                    .expect("don't know why it failed!"))
-                            ]
-                        )
-                    );
-                }
-            }
-            None => {
-                table.add_row(Row::new(vec![Cell::new("empty")]));
-            }
-        }
-        table.print_tty(false);
-    }
 }
 
 impl Printer for TablePrinter {
-    fn print(&self, value: &Value) {
-        match value {
-            Value::Array(arr) => TablePrinter::print_arr(arr),
-            _ => TablePrinter::print_arr(&vec![value.to_owned()])
+    fn print(&self, data: &JsonTable) -> GenericResult<()> {
+        let mut table = Table::new();
+
+        // header row
+        table.add_row(
+            Row::new(
+                match &data.headers {
+                    TableHeader::NamedFields { fields } => {
+                        fields
+                            .iter()
+                            .map(|f| Cell::new(f).style_spec("bFc"))
+                            .collect()
+                    }
+                    TableHeader::SingleUnnamedColumn => vec![Cell::new("value")],
+                }
+            )
+        );
+
+        // data rows
+        for value in &data.values {
+            let mut row = Row::empty();
+            for element in value {
+                let formatted = TablePrinter::pprint_table_cell(&element)?;
+                row.add_cell(Cell::new(formatted.as_str()))
+            }
+            table.add_row(row);
         }
-    }
-}
 
-struct JsonPrinter;
-
-impl Printer for JsonPrinter {
-    fn print(&self, value: &Value) {
-        println!("{}", serde_json::to_string(value).expect("json value should always be stringifiable"))
+        table.printstd();
+        Ok(())
     }
 }
