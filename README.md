@@ -91,3 +91,18 @@ In the previous commands, `jtab` requires the full payload to be given to it at 
 | 106085140  | Kategoria:Niezweryfikowane martwe linki niezarchiwizowane przez Internet Archive | MastiBot        | categorize |
 +------------+----------------------------------------------------------------------------------+-----------------+------------+
 ```
+
+You can conditionally colorize some fields based on their value:
+
+```
+➜  ~ curl -s  https://stream.wikimedia.org/v2/stream/recentchange \
+         | grep data \
+         | sed 's/^data: //g' \
+         | jtab --streaming --take 5 -f id -f title -f user -f type \
+                --colorize 'type:categorize:bFg' \
+                --colorize 'type:edit:bFr'
+```
+
+![res](docs/img/colorize-result.png)
+
+The colorize string is in the format `column_name:value:style_spec`. The `style_spec` corresponds to [the style specifiers of the prettytable-rs](https://github.com/phsym/prettytable-rs#list-of-style-specifiers) library that jtab is based on.
