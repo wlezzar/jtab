@@ -16,6 +16,13 @@ A tiny command line tool written in rust to print json data as a formatted table
 
 ## Install
 
+- Linux and Macos binaries are available as tarballs in the [release section](https://github.com/wlezzar/jtab/releases/latest).
+- For other platforms, you can use `cargo`:
+
+```bash
+cargo install --git https://github.com/wlezzar/jtab
+```
+
 ## Sample commands
 
 Pipe some weather data into jtab:
