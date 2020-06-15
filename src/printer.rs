@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::error::Error;
 
-use prettytable::{Attr, Cell, color, Row, Table};
+use prettytable::{Cell, Row, Table};
+use regex::Regex;
 use serde_json::Value;
 use yaml_rust::{Yaml, YamlEmitter};
 use yaml_rust::yaml::{Array, Hash};
@@ -57,12 +59,31 @@ fn infer_headers(arr: &Vec<Value>) -> TableHeader {
     }
 }
 
+#[derive(Debug)]
+pub struct ColorizeSpec {
+    field: String,
+    value: String,
+    style: String,
+}
+
+impl ColorizeSpec {
+    pub fn parse(s: &String) -> GenericResult<ColorizeSpec> {
+        let re = Regex::new(r"^([^:]+):(.+):([a-zA-Z]+)$")?;
+        match re.captures(s) {
+            Some(captures) => {
+                let field = captures.get(1).ok_or("wrong regular expression...")?.as_str().to_string();
+                let value = captures.get(2).ok_or("wrong regular expression...")?.as_str().to_string();
+                let style = captures.get(3).ok_or("wrong regular expression...")?.as_str().to_string();
+                Ok(ColorizeSpec { field, value, style })
+            }
+            _ => Err("wrong colorize expression. Should be in the form of : 'field:value:spec'")?
+        }
+    }
+}
+
 pub trait Printer {
     fn print(&self, data: &JsonTable) -> GenericResult<()>;
 }
-
-#[derive(Default)]
-pub struct TablePrinter;
 
 fn json_to_yaml(value: &Value) -> Yaml {
     match value {
@@ -84,7 +105,16 @@ fn json_to_yaml(value: &Value) -> Yaml {
     }
 }
 
+#[derive(Default)]
+pub struct TablePrinter {
+    colorize: Vec<ColorizeSpec>
+}
+
 impl TablePrinter {
+    pub fn new(colorize: Vec<ColorizeSpec>) -> TablePrinter {
+        TablePrinter { colorize }
+    }
+
     fn pprint_table_cell(value: &Value) -> GenericResult<String> {
         match value {
             Value::String(s) => Ok(s.to_string()),
@@ -121,12 +151,39 @@ impl Printer for TablePrinter {
             )
         );
 
+        // build colorize map
+        let colorize: HashMap<usize, Vec<&ColorizeSpec>> = match &data.headers {
+            TableHeader::NamedFields { fields } => {
+                let mut res: HashMap<usize, Vec<&ColorizeSpec>> = HashMap::new();
+                for c in self.colorize.iter() {
+                    if let Some(index) = fields.iter().position(|f| c.field == *f) {
+                        res.entry(index).or_insert(Vec::new()).push(c)
+                    }
+                }
+                res
+            }
+            _ => HashMap::new(),
+        };
+
         // data rows
+
         for value in &data.values {
             let mut row = Row::empty();
-            for element in value {
-                let formatted = TablePrinter::pprint_table_cell(&element)?;
-                row.add_cell(Cell::new(formatted.as_str()))
+            for (idx, element) in value.iter().enumerate() {
+                let formatted = TablePrinter::pprint_table_cell(element)?;
+                let formatted = formatted.as_str();
+                let cell = Cell::new(formatted);
+                let cell = match colorize.get(&idx) {
+                    Some(styles) => {
+                        match styles.iter().find(|s| s.value == *formatted) {
+                            Some(style) => cell.style_spec(style.style.as_str()),
+                            None => cell
+                        }
+                    }
+                    _ => cell
+                };
+
+                row.add_cell(cell);
             }
             table.add_row(row);
         }
