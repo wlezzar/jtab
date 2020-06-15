@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::error::Error;
 
-use prettytable::{Cell, Row, Table};
+use prettytable::{Cell, Row, Table, format};
 use regex::Regex;
 use serde_json::Value;
 use yaml_rust::{Yaml, YamlEmitter};
 use yaml_rust::yaml::{Array, Hash};
+use prettytable::format::{FormatBuilder, LinePosition, LineSeparator};
 
 type GenericResult<T> = Result<T, Box<dyn Error>>;
 
@@ -105,14 +106,20 @@ fn json_to_yaml(value: &Value) -> Yaml {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug)]
+pub enum JsonTableFormat {
+    Default,
+    Markdown,
+}
+
 pub struct TablePrinter {
-    colorize: Vec<ColorizeSpec>
+    colorize: Vec<ColorizeSpec>,
+    format: JsonTableFormat,
 }
 
 impl TablePrinter {
-    pub fn new(colorize: Vec<ColorizeSpec>) -> TablePrinter {
-        TablePrinter { colorize }
+    pub fn new(colorize: Vec<ColorizeSpec>, format: JsonTableFormat) -> TablePrinter {
+        TablePrinter { colorize, format }
     }
 
     fn pprint_table_cell(value: &Value) -> GenericResult<String> {
@@ -137,7 +144,7 @@ impl Printer for TablePrinter {
         let mut table = Table::new();
 
         // header row
-        table.add_row(
+        table.set_titles(
             Row::new(
                 match &data.headers {
                     TableHeader::NamedFields { fields } => {
@@ -186,6 +193,22 @@ impl Printer for TablePrinter {
                 row.add_cell(cell);
             }
             table.add_row(row);
+        }
+
+        match &self.format {
+            JsonTableFormat::Default => table.set_format(*format::consts::FORMAT_BOX_CHARS),
+            JsonTableFormat::Markdown => {
+                table.set_format(
+                    FormatBuilder::new()
+                        .padding(1, 1)
+                        .separator(
+                            LinePosition::Title,
+                            LineSeparator::new('-', '-', '-', '-'),
+                        )
+                        .column_separator('|')
+                        .build()
+                )
+            }
         }
 
         table.printstd();

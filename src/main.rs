@@ -6,7 +6,8 @@ use structopt::StructOpt;
 use printer::{Printer, TablePrinter};
 use reader::{OneShotValueReader, StreamingValueReader, ValueReader};
 
-use crate::printer::{ColorizeSpec, JsonTable, TableHeader};
+use crate::printer::{ColorizeSpec, JsonTable, TableHeader, JsonTableFormat};
+use std::str::FromStr;
 
 mod printer;
 mod reader;
@@ -23,8 +24,23 @@ struct Command {
     #[structopt(long, short, help = "add a color spec to a column in the form of: 'col:value:spec'")]
     colorize: Vec<String>,
 
+    #[structopt(long, default_value = "default", help = "You can use 'default' or 'markdown'")]
+    format: JsonTableFormat,
+
     #[structopt(long, help = "limit the number of printed elements")]
     take: Option<usize>,
+}
+
+impl FromStr for JsonTableFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "default" => Ok(JsonTableFormat::Default),
+            "markdown" => Ok(JsonTableFormat::Markdown),
+            _ => Err(format!("unknown format: {}", s))
+        }
+    }
 }
 
 type GenericResult<T> = Result<T, Box<dyn Error>>;
@@ -49,7 +65,7 @@ fn main() -> GenericResult<()> {
     };
 
     let table = JsonTable::new(given_headers, &data);
-    TablePrinter::new(colorize).print(&table)?;
+    TablePrinter::new(colorize, command.format).print(&table)?;
 
     Ok(())
 }
