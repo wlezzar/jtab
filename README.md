@@ -118,7 +118,7 @@ You can conditionally colorize some fields based on their value:
 
 The `colorize` option takes a string in the format `column_name:value:style_spec`. The `style_spec` corresponds to [the style specifiers of the prettytable-rs](https://github.com/phsym/prettytable-rs#list-of-style-specifiers) library that jtab is based on.
 
-It is also possible to output the table in a markdown compatible format:
+It is also possible to output the table in a markdown compatible format (thanks [rlezzar](https://github.com/floufen) for the contribution):
 
 ```
 ➜  echo '[{"id": "1", "name": "Rust"}, {"id": "2", "name": "Jtab"}]' \
