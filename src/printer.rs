@@ -203,9 +203,10 @@ impl Printer for TablePrinter {
                         .padding(1, 1)
                         .separator(
                             LinePosition::Title,
-                            LineSeparator::new('-', '-', '-', '-'),
+                            LineSeparator::new('-', '|', '|', '|'),
                         )
                         .column_separator('|')
+                        .borders('|')
                         .build()
                 )
             }
