@@ -35,11 +35,28 @@ Nested data is also handled well.
 
 ## Install
 
-- Linux and Macos binaries are available as tarballs in the [release section](https://github.com/wlezzar/jtab/releases/latest).
-- For other platforms, you can use `cargo`:
+### Using Homebrew (MacOs & Linux)
+
+```bash
+brew tap wlezzar/jtab https://github.com/wlezzar/jtab
+brew install wlezzar/jtab/jtab
+
+# use jtab
+jtab --help
+```
+
+### Using prebuilt binaries
+
+Linux and Macos binaries are available as tarballs in the [release section](https://github.com/wlezzar/jtab/releases/latest).
+
+### Using cargo (all platforms)
+
+For other platforms, you can use `cargo`:
 
 ```bash
 cargo install --git https://github.com/wlezzar/jtab
+
+jtab --help
 ```
 
 ## Sample commands

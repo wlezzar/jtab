@@ -1,6 +1,6 @@
 [package]
 name = "jtab"
-version = "0.1.0"
+version = "0.3.0"
 authors = ["wlezzar <walid.lezzar@gmail.com>"]
 edition = "2018"
 
