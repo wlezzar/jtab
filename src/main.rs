@@ -9,26 +9,25 @@ use reader::{OneShotValueReader, StreamingValueReader, ValueReader};
 
 use crate::printer::{ColorizeSpec, HtmlTableFormat, HtmlTablePrinter, JsonTable, PlainTextTableFormat, TableFormat, TableHeader};
 
-
 mod printer;
 mod reader;
 
 #[derive(Debug, StructOpt)]
 #[structopt(about = "Print any json data as a table from the command line")]
 struct Command {
-    #[structopt(long, help = "receive one json per line")]
+    #[structopt(long, help = "Expect one json per line")]
     streaming: bool,
 
-    #[structopt(long, short, help = "select a subset of fields")]
+    #[structopt(long, short, help = "Select a subset of fields")]
     fields: Option<Vec<String>>,
 
-    #[structopt(long, short, help = "add a color spec to a column in the form of: 'col:value:spec'")]
+    #[structopt(long, short, help = "Add a color spec to a column in the form of: 'col:value:spec'")]
     colorize: Vec<String>,
 
-    #[structopt(long, default_value = "default", help = "You can use 'default', 'markdown' or 'html")]
+    #[structopt(long, default_value = "default", help = "You can use 'default', 'markdown', 'html' or 'html-raw'")]
     format: TableFormat,
 
-    #[structopt(long, help = "limit the number of printed elements")]
+    #[structopt(long, help = "Limit the number of printed elements")]
     take: Option<usize>,
 }
 
