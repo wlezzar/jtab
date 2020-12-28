@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::error::Error;
 
-use prettytable::{Cell, Row, Table, format};
+use prettytable::{Cell, format, Row, Table};
+use prettytable::format::{FormatBuilder, LinePosition, LineSeparator};
 use regex::Regex;
 use serde_json::Value;
 use yaml_rust::{Yaml, YamlEmitter};
 use yaml_rust::yaml::{Array, Hash};
-use prettytable::format::{FormatBuilder, LinePosition, LineSeparator};
 
 type GenericResult<T> = Result<T, Box<dyn Error>>;
 
@@ -107,39 +107,52 @@ fn json_to_yaml(value: &Value) -> Yaml {
 }
 
 #[derive(Debug)]
-pub enum JsonTableFormat {
+pub enum PlainTextTableFormat {
     Default,
     Markdown,
 }
 
-pub struct TablePrinter {
-    colorize: Vec<ColorizeSpec>,
-    format: JsonTableFormat,
+#[derive(Debug)]
+pub enum HtmlTableFormat {
+    Raw,
+    Styled,
 }
 
-impl TablePrinter {
-    pub fn new(colorize: Vec<ColorizeSpec>, format: JsonTableFormat) -> TablePrinter {
-        TablePrinter { colorize, format }
-    }
 
-    fn pprint_table_cell(value: &Value) -> GenericResult<String> {
-        match value {
-            Value::String(s) => Ok(s.to_string()),
-            Value::Object(_) | Value::Array(_) => {
-                let mut res = String::new();
-                {
-                    let yaml_form = json_to_yaml(value);
-                    let mut emitter = YamlEmitter::new(&mut res);
-                    emitter.dump(&yaml_form)?;
-                }
-                Ok(res.trim_start_matches("---\n").to_string())
+#[derive(Debug)]
+pub enum TableFormat {
+    PlainText(PlainTextTableFormat),
+    Html(HtmlTableFormat),
+}
+
+fn pprint_table_cell(value: &Value) -> GenericResult<String> {
+    match value {
+        Value::String(s) => Ok(s.to_string()),
+        Value::Object(_) | Value::Array(_) => {
+            let mut res = String::new();
+            {
+                let yaml_form = json_to_yaml(value);
+                let mut emitter = YamlEmitter::new(&mut res);
+                emitter.dump(&yaml_form)?;
             }
-            _ => Ok(serde_json::to_string(value)?)
+            Ok(res.trim_start_matches("---\n").to_string())
         }
+        _ => Ok(serde_json::to_string(value)?)
     }
 }
 
-impl Printer for TablePrinter {
+pub struct PlainTextTablePrinter {
+    colorize: Vec<ColorizeSpec>,
+    format: PlainTextTableFormat,
+}
+
+impl PlainTextTablePrinter {
+    pub fn new(colorize: Vec<ColorizeSpec>, format: PlainTextTableFormat) -> PlainTextTablePrinter {
+        PlainTextTablePrinter { colorize, format }
+    }
+}
+
+impl Printer for PlainTextTablePrinter {
     fn print(&self, data: &JsonTable) -> GenericResult<()> {
         let mut table = Table::new();
 
@@ -177,7 +190,7 @@ impl Printer for TablePrinter {
         for value in &data.values {
             let mut row = Row::empty();
             for (idx, element) in value.iter().enumerate() {
-                let formatted = TablePrinter::pprint_table_cell(element)?;
+                let formatted = pprint_table_cell(element)?;
                 let formatted = formatted.as_str();
                 let cell = Cell::new(formatted);
                 let cell = match colorize.get(&idx) {
@@ -196,8 +209,8 @@ impl Printer for TablePrinter {
         }
 
         match &self.format {
-            JsonTableFormat::Default => table.set_format(*format::consts::FORMAT_BOX_CHARS),
-            JsonTableFormat::Markdown => {
+            PlainTextTableFormat::Default => table.set_format(*format::consts::FORMAT_BOX_CHARS),
+            PlainTextTableFormat::Markdown => {
                 table.set_format(
                     FormatBuilder::new()
                         .padding(1, 1)
@@ -216,3 +229,67 @@ impl Printer for TablePrinter {
         Ok(())
     }
 }
+
+pub struct HtmlTablePrinter {
+    format: HtmlTableFormat
+}
+
+impl HtmlTablePrinter {
+    pub fn new(format: HtmlTableFormat) -> Self {
+        Self { format }
+    }
+}
+
+const BOOTSTRAP_CDN: &str = r#"
+    <link
+      rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+      integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z"
+      crossorigin="anonymous">
+"#;
+
+impl Printer for HtmlTablePrinter {
+    fn print(&self, data: &JsonTable) -> GenericResult<()> {
+        let mut result = String::new();
+
+        match self.format {
+            HtmlTableFormat::Raw => {
+                result.push_str("<table>")
+            }
+            HtmlTableFormat::Styled => {
+                result.push_str(BOOTSTRAP_CDN);
+                result.push_str(r#"<table class="table table-bordered table-hover">"#)
+            }
+        }
+
+        // header
+        result.push_str("<tr>");
+        match &data.headers {
+            TableHeader::NamedFields { fields } => {
+                for field in fields {
+                    result.push_str(format!("<th>{}</th>", field).as_str())
+                }
+            }
+            TableHeader::SingleUnnamedColumn => result.push_str("<th>Value</th>")
+        }
+        result.push_str("</tr>");
+
+        // rows
+        for row in &data.values {
+            result.push_str("<tr>");
+            for element in row {
+                let formatted = pprint_table_cell(element)?;
+                let formatted = formatted.as_str();
+                result.push_str(format!("<td><pre>{}</pre></td>", formatted).as_str())
+            }
+            result.push_str("</tr>");
+        };
+
+        result.push_str("</table>");
+
+        println!("{}", result);
+
+        Ok(())
+    }
+}
+

@@ -1,13 +1,14 @@
 use std::error::Error;
 use std::io;
+use std::str::FromStr;
 
 use structopt::StructOpt;
 
-use printer::{Printer, TablePrinter};
+use printer::{PlainTextTablePrinter, Printer};
 use reader::{OneShotValueReader, StreamingValueReader, ValueReader};
 
-use crate::printer::{ColorizeSpec, JsonTable, TableHeader, JsonTableFormat};
-use std::str::FromStr;
+use crate::printer::{ColorizeSpec, HtmlTableFormat, HtmlTablePrinter, JsonTable, PlainTextTableFormat, TableFormat, TableHeader};
+
 
 mod printer;
 mod reader;
@@ -24,20 +25,22 @@ struct Command {
     #[structopt(long, short, help = "add a color spec to a column in the form of: 'col:value:spec'")]
     colorize: Vec<String>,
 
-    #[structopt(long, default_value = "default", help = "You can use 'default' or 'markdown'")]
-    format: JsonTableFormat,
+    #[structopt(long, default_value = "default", help = "You can use 'default', 'markdown' or 'html")]
+    format: TableFormat,
 
     #[structopt(long, help = "limit the number of printed elements")]
     take: Option<usize>,
 }
 
-impl FromStr for JsonTableFormat {
+impl FromStr for TableFormat {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "default" => Ok(JsonTableFormat::Default),
-            "markdown" => Ok(JsonTableFormat::Markdown),
+            "default" => Ok(TableFormat::PlainText(PlainTextTableFormat::Default)),
+            "markdown" => Ok(TableFormat::PlainText(PlainTextTableFormat::Markdown)),
+            "html" => Ok(TableFormat::Html(HtmlTableFormat::Styled)),
+            "html-raw" => Ok(TableFormat::Html(HtmlTableFormat::Raw)),
             _ => Err(format!("unknown format: {}", s))
         }
     }
@@ -65,7 +68,11 @@ fn main() -> GenericResult<()> {
     };
 
     let table = JsonTable::new(given_headers, &data);
-    TablePrinter::new(colorize, command.format).print(&table)?;
+
+    match command.format {
+        TableFormat::PlainText(format) => PlainTextTablePrinter::new(colorize, format).print(&table)?,
+        TableFormat::Html(format) => HtmlTablePrinter::new(format).print(&table)?,
+    }
 
     Ok(())
 }
