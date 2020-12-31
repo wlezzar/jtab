@@ -3,6 +3,8 @@
 
 dist: trusty
 language: rust
+rust:
+  - 1.44.1
 services: docker
 sudo: required
 
