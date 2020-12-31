@@ -3,7 +3,7 @@
 
 environment:
   global:
-    RUST_VERSION: stable
+    RUST_VERSION: 1.44.1
     CRATE_NAME: jtab
 
   matrix:
@@ -55,7 +55,6 @@ deploy:
       secure: 4gOovT1KzXHaDMYTY3ggLCl53KfyObtBevk/xuJZ4gEzGnwy9vX3aApXZhyrPdvr
     description: ''
     on:
-      RUST_VERSION: stable
       appveyor_repo_tag: true
     provider: GitHub
 
