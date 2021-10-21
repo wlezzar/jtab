@@ -3,10 +3,12 @@ use std::io::{BufRead, Read};
 
 use serde_json::Value;
 
-type GenericResult<T> = Result<T, Box<dyn Error>>;
+use crate::GenericResult;
+
+pub mod csv;
 
 pub trait ValueReader {
-    fn read_value(self, take: Option<usize>) -> GenericResult<Value>;
+    fn read_value(&mut self, take: Option<usize>) -> GenericResult<Value>;
 }
 
 pub struct OneShotValueReader<R: Read> {
@@ -20,8 +22,9 @@ impl<R: Read> OneShotValueReader<R> {
 }
 
 impl<R: Read> ValueReader for OneShotValueReader<R> {
-    fn read_value(self, take: Option<usize>) -> GenericResult<Value> {
-        let value = serde_json::from_reader::<_, Value>(self.read)?;
+    fn read_value(&mut self, take: Option<usize>) -> GenericResult<Value> {
+        let read = &mut self.read;
+        let value = serde_json::from_reader::<_, Value>(read)?;
         if let (Some(take), Value::Array(arr)) = (take, &value) {
             Ok(Value::Array(arr.iter().take(take).map(|e| e.to_owned()).collect()))
         } else {
@@ -41,10 +44,11 @@ impl<R: BufRead> StreamingValueReader<R> {
 }
 
 impl<R: BufRead> ValueReader for StreamingValueReader<R> {
-    fn read_value(self, take: Option<usize>) -> GenericResult<Value> {
+    fn read_value(&mut self, take: Option<usize>) -> GenericResult<Value> {
         let take = take.unwrap_or(100);
         let elements: Vec<Value> =
             self.buf_read
+                .by_ref()
                 .lines()
                 .take(take)
                 .flat_map(|line| match line {

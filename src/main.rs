@@ -1,5 +1,8 @@
 use std::error::Error;
+use std::ffi::{OsStr, OsString};
 use std::io;
+use std::iter::Map;
+use std::num::ParseIntError;
 use std::str::FromStr;
 
 use structopt::StructOpt;
@@ -12,12 +15,11 @@ use crate::printer::{ColorizeSpec, HtmlTableFormat, HtmlTablePrinter, JsonTable,
 mod printer;
 mod reader;
 
+pub type GenericResult<T> = Result<T, Box<dyn Error>>;
+
 #[derive(Debug, StructOpt)]
 #[structopt(about = "Print any json data as a table from the command line")]
 struct Command {
-    #[structopt(long, help = "Expect one json per line")]
-    streaming: bool,
-
     #[structopt(long, short, help = "Select a subset of fields")]
     fields: Option<Vec<String>>,
 
@@ -29,6 +31,23 @@ struct Command {
 
     #[structopt(long, help = "Limit the number of printed elements")]
     take: Option<usize>,
+
+    #[structopt(subcommand)]
+    content_type: ContentSubcommand,
+}
+
+#[derive(Debug, StructOpt)]
+enum ContentSubcommand {
+    Csv {
+        #[structopt(short, long)]
+        delimiter: String,
+        #[structopt(long = "--no-header")]
+        no_header: bool,
+    },
+    Json {
+        #[structopt(long, help = "Expect one json per line")]
+        streaming: bool,
+    },
 }
 
 impl FromStr for TableFormat {
@@ -45,18 +64,28 @@ impl FromStr for TableFormat {
     }
 }
 
-type GenericResult<T> = Result<T, Box<dyn Error>>;
-
 fn main() -> GenericResult<()> {
     let command: Command = Command::from_args();
     let stdin = io::stdin();
 
-    let data =
-        if command.streaming {
-            StreamingValueReader::new(stdin.lock()).read_value(command.take)?
-        } else {
-            OneShotValueReader::new(stdin).read_value(command.take)?
-        };
+    let mut reader: Box<dyn ValueReader> = match command.content_type {
+        ContentSubcommand::Csv { delimiter, no_header } => {
+            let delimiter = match delimiter.as_str() {
+                r#"\t"# => '\t' as u8,
+                _ => parse_delimiter(delimiter)?
+            };
+
+            Box::new(CsvReader::new(stdin.lock(), delimiter, no_header))
+        }
+        ContentSubcommand::Json { streaming } => {
+            match streaming {
+                true => Box::new(StreamingValueReader::new(stdin.lock())),
+                false => Box::new(OneShotValueReader::new(stdin))
+            }
+        }
+    };
+
+    let data = reader.read_value(command.take)?;
 
     let colorize: Vec<_> =
         command.colorize.iter().map(|c| ColorizeSpec::parse(c)).collect::<Result<_, _>>()?;
@@ -74,4 +103,14 @@ fn main() -> GenericResult<()> {
     }
 
     Ok(())
+}
+
+fn parse_delimiter(str: String) -> Result<u8, String> {
+    let mut chars = str.chars();
+
+    match chars.next() {
+        None => Err("empty delimiter".to_string()),
+        Some(delimiter) if chars.next().is_none() => Ok(delimiter as u8),
+        _ => Err(format!("delimiter string contains more than one character: {}", str))
+    }
 }
