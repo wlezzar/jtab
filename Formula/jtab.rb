@@ -1,7 +1,6 @@
 class Jtab < Formula
   desc "Print any json data as a table from the command line"
   homepage "https://github.com/wlezzar/jtab"
-  bottle :unneeded
   version "0.4.4"
 
   if OS.mac?
