@@ -1,0 +1,67 @@
+environment:
+  properties:
+    artifactsDir: out/jreleaser/assemble/jtab/archive
+
+project:
+  name: jtab
+  description: "Print any json data as a table from the command line"
+  longDescription: "Print any json data as a table from the command line"
+  links:
+    homepage: https://github.com/wlezzar/jtab
+  authors:
+    - Walid Lezzar
+  license: MIT
+  inceptionYear: 2021
+  stereotype: cli
+
+platform:
+  replacements:
+    'osx-x86_64': 'x86_64-apple-darwin'
+    'osx-aarch_64': 'aarch64-apple-darwin'
+    'osx': 'all-apple-darwin'
+    'linux-x86_64': 'x86_64-unknown-linux-gnu'
+    'linux-aarch_64': 'aarch64-unknown-linux-gnu'
+    'windows-x86_64': 'x86_64-pc-windows-msvc'
+
+release:
+  github:
+    name: jtab
+    overwrite: true
+    changelog:
+      formatted: ALWAYS
+      format: '- {{commitShortHash}} {{commitTitle}}'
+      preset: conventional-commits
+      contributors:
+        format: '- {{contributorName}}{{#contributorUsernameAsLink}} ({{.}}){{/contributorUsernameAsLink}}'
+
+assemble:
+  archive:
+    jtab:
+      active: ALWAYS
+      formats: [ ZIP ]
+      attachPlatform: true
+      fileSets:
+        - input: 'target/{{ osPlatformReplaced }}/release'
+          output: 'bin'
+          includes: [ 'jtab{.exe,}' ]
+        - input: '.'
+          includes: [ 'LICENSE' ]
+
+distributions:
+  jtab:
+    type: BINARY
+    executable:
+      windowsExtension: exe
+    artifacts:
+      - path: '{{artifactsDir}}/{{distributionName}}-{{projectVersion}}-all-apple-darwin.zip'
+        platform: 'osx'
+      - path: '{{artifactsDir}}/{{distributionName}}-{{projectVersion}}-aarch64-apple-darwin.zip'
+        platform: 'osx-aarch_64'
+      - path: '{{artifactsDir}}/{{distributionName}}-{{projectVersion}}-x86_64-apple-darwin.zip'
+        platform: 'osx-x86_64'
+      - path: '{{artifactsDir}}/{{distributionName}}-{{projectVersion}}-x86_64-pc-windows-msvc.zip'
+        platform: 'windows-x86_64'
+      - path: '{{artifactsDir}}/{{distributionName}}-{{projectVersion}}-x86_64-unknown-linux-gnu.zip'
+        platform: 'linux-x86_64'
+      - path: '{{artifactsDir}}/{{distributionName}}-{{projectVersion}}-aarch64-unknown-linux-gnu.zip'
+        platform: 'linux-aarch_64'
