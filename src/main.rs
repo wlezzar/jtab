@@ -11,6 +11,7 @@ use crate::printer::{ColorizeSpec, HtmlTableFormat, HtmlTablePrinter, JsonTable,
 
 mod printer;
 mod reader;
+mod table;
 
 #[derive(Debug, StructOpt)]
 #[structopt(about = "Print any json data as a table from the command line")]
