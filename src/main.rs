@@ -1,6 +1,6 @@
 extern crate core;
 
-use std::error::Error;
+
 use std::io;
 use std::str::FromStr;
 
@@ -103,13 +103,11 @@ fn main() -> anyhow::Result<()> {
     let colorize: Vec<_> = command
         .colorize
         .iter()
-        .map(|c| ColorizeSpec::parse(c))
+        .map(ColorizeSpec::parse)
         .collect::<Result<_, _>>()?;
 
-    let given_headers = match command.fields {
-        Some(fields) => Some(TableHeader::NamedFields { fields }),
-        None => None,
-    };
+    let given_headers =
+        command.fields.map(|fields| TableHeader::NamedFields { fields });
 
     let table = JsonTable::new(given_headers, &data);
 

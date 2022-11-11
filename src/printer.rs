@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::error::Error;
 
 use anyhow::bail;
 use prettytable::{Cell, format, Row, Table};
@@ -7,7 +6,7 @@ use prettytable::format::{FormatBuilder, LinePosition, LineSeparator};
 use regex::Regex;
 use serde_json::Value;
 use yaml_rust::{Yaml, YamlEmitter};
-use yaml_rust::yaml::{Array, Hash};
+use yaml_rust::yaml::Hash;
 
 pub enum TableHeader {
     NamedFields { fields: Vec<String> },
@@ -73,17 +72,17 @@ impl ColorizeSpec {
             Some(captures) => {
                 let field = captures
                     .get(1)
-                    .ok_or(anyhow::Error::msg("wrong regular expression..."))?
+                    .ok_or_else(|| anyhow::Error::msg("wrong regular expression..."))?
                     .as_str()
                     .to_string();
                 let value = captures
                     .get(2)
-                    .ok_or(anyhow::Error::msg("wrong regular expression..."))?
+                    .ok_or_else(|| anyhow::Error::msg("wrong regular expression..."))?
                     .as_str()
                     .to_string();
                 let style = captures
                     .get(3)
-                    .ok_or(anyhow::Error::msg("wrong regular expression..."))?
+                    .ok_or_else(|| anyhow::Error::msg("wrong regular expression..."))?
                     .as_str()
                     .to_string();
                 Ok(ColorizeSpec {
@@ -111,8 +110,8 @@ fn json_to_yaml(value: &Value) -> Yaml {
             Yaml::Hash(hash)
         }
         Value::Array(arr) => {
-            let arr = arr.iter().map(|e| json_to_yaml(e)).collect::<Vec<_>>();
-            Yaml::Array(Array::from(arr))
+            let arr = arr.iter().map(json_to_yaml).collect::<Vec<_>>();
+            Yaml::Array(arr)
         }
         Value::Null => Yaml::Null,
         Value::Bool(e) => Yaml::Boolean(e.to_owned()),
@@ -185,7 +184,7 @@ impl Printer for PlainTextTablePrinter {
                 let mut res: HashMap<usize, Vec<&ColorizeSpec>> = HashMap::new();
                 for c in self.colorize.iter() {
                     if let Some(index) = fields.iter().position(|f| c.field == *f) {
-                        res.entry(index).or_insert(Vec::new()).push(c)
+                        res.entry(index).or_default().push(c)
                     }
                 }
                 res

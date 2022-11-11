@@ -1,5 +1,5 @@
-use std::error::Error;
-use std::fs::read;
+
+
 use std::io::{BufRead, Read};
 
 use serde_json::{Map, Value};
@@ -52,12 +52,12 @@ impl<R: BufRead> ValueReader for StreamingJsonReader<R> {
                 Ok(line) => match serde_json::from_str::<Value>(line.as_str()) {
                     Ok(parsed) => Some(parsed),
                     Err(err) => {
-                        eprintln!("error parsing row: {}", err.to_string());
+                        eprintln!("error parsing row: {}", err);
                         None
                     }
                 },
                 Err(err) => {
-                    eprintln!("error reading row: {}", err.to_string());
+                    eprintln!("error reading row: {}", err);
                     None
                 }
             })
