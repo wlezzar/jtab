@@ -1,14 +1,13 @@
 use std::collections::HashMap;
 use std::error::Error;
 
+use anyhow::bail;
 use prettytable::{Cell, format, Row, Table};
 use prettytable::format::{FormatBuilder, LinePosition, LineSeparator};
 use regex::Regex;
 use serde_json::Value;
 use yaml_rust::{Yaml, YamlEmitter};
 use yaml_rust::yaml::{Array, Hash};
-
-type GenericResult<T> = Result<T, Box<dyn Error>>;
 
 pub enum TableHeader {
     NamedFields { fields: Vec<String> },
@@ -24,7 +23,7 @@ impl JsonTable {
     pub fn new(headers: Option<TableHeader>, root: &Value) -> JsonTable {
         let rows: Vec<Value> = match root {
             Value::Array(arr) => arr.to_owned(), // TODO: is it possible to avoid cloning here?
-            _ => vec![root.to_owned()]
+            _ => vec![root.to_owned()],
         };
 
         let headers = headers.unwrap_or_else(|| infer_headers(&rows));
@@ -37,7 +36,7 @@ impl JsonTable {
                         fields
                             .iter()
                             .map(|h| row.get(h).unwrap_or(&Value::Null).to_owned())
-                            .collect()
+                            .collect(),
                     )
                 }
             }
@@ -54,7 +53,7 @@ impl JsonTable {
 fn infer_headers(arr: &Vec<Value>) -> TableHeader {
     match arr.first() {
         Some(Value::Object(obj)) => TableHeader::NamedFields {
-            fields: obj.keys().map(|h| h.to_owned()).collect()
+            fields: obj.keys().map(|h| h.to_owned()).collect(),
         },
         _ => TableHeader::SingleUnnamedColumn,
     }
@@ -68,22 +67,38 @@ pub struct ColorizeSpec {
 }
 
 impl ColorizeSpec {
-    pub fn parse(s: &String) -> GenericResult<ColorizeSpec> {
+    pub fn parse(s: &String) -> anyhow::Result<ColorizeSpec> {
         let re = Regex::new(r"^([^:]+):(.+):([a-zA-Z]+)$")?;
         match re.captures(s) {
             Some(captures) => {
-                let field = captures.get(1).ok_or("wrong regular expression...")?.as_str().to_string();
-                let value = captures.get(2).ok_or("wrong regular expression...")?.as_str().to_string();
-                let style = captures.get(3).ok_or("wrong regular expression...")?.as_str().to_string();
-                Ok(ColorizeSpec { field, value, style })
+                let field = captures
+                    .get(1)
+                    .ok_or(anyhow::Error::msg("wrong regular expression..."))?
+                    .as_str()
+                    .to_string();
+                let value = captures
+                    .get(2)
+                    .ok_or(anyhow::Error::msg("wrong regular expression..."))?
+                    .as_str()
+                    .to_string();
+                let style = captures
+                    .get(3)
+                    .ok_or(anyhow::Error::msg("wrong regular expression..."))?
+                    .as_str()
+                    .to_string();
+                Ok(ColorizeSpec {
+                    field,
+                    value,
+                    style,
+                })
             }
-            _ => Err("wrong colorize expression. Should be in the form of : 'field:value:spec'")?
+            _ => bail!("wrong colorize expression. Should be in the form of : 'field:value:spec'"),
         }
     }
 }
 
 pub trait Printer {
-    fn print(&self, data: &JsonTable) -> GenericResult<()>;
+    fn print(&self, data: &JsonTable) -> anyhow::Result<()>;
 }
 
 fn json_to_yaml(value: &Value) -> Yaml {
@@ -102,7 +117,7 @@ fn json_to_yaml(value: &Value) -> Yaml {
         Value::Null => Yaml::Null,
         Value::Bool(e) => Yaml::Boolean(e.to_owned()),
         Value::Number(n) => Yaml::Real(format!("{}", n)),
-        Value::String(s) => Yaml::String(s.to_owned())
+        Value::String(s) => Yaml::String(s.to_owned()),
     }
 }
 
@@ -118,14 +133,13 @@ pub enum HtmlTableFormat {
     Styled,
 }
 
-
 #[derive(Debug)]
 pub enum TableFormat {
     PlainText(PlainTextTableFormat),
     Html(HtmlTableFormat),
 }
 
-fn pprint_table_cell(value: &Value) -> GenericResult<String> {
+fn pprint_table_cell(value: &Value) -> anyhow::Result<String> {
     match value {
         Value::String(s) => Ok(s.to_string()),
         Value::Object(_) | Value::Array(_) => {
@@ -137,7 +151,7 @@ fn pprint_table_cell(value: &Value) -> GenericResult<String> {
             }
             Ok(res.trim_start_matches("---\n").to_string())
         }
-        _ => Ok(serde_json::to_string(value)?)
+        _ => Ok(serde_json::to_string(value)?),
     }
 }
 
@@ -153,23 +167,17 @@ impl PlainTextTablePrinter {
 }
 
 impl Printer for PlainTextTablePrinter {
-    fn print(&self, data: &JsonTable) -> GenericResult<()> {
+    fn print(&self, data: &JsonTable) -> anyhow::Result<()> {
         let mut table = Table::new();
 
         // header row
-        table.set_titles(
-            Row::new(
-                match &data.headers {
-                    TableHeader::NamedFields { fields } => {
-                        fields
-                            .iter()
-                            .map(|f| Cell::new(f).style_spec("bFc"))
-                            .collect()
-                    }
-                    TableHeader::SingleUnnamedColumn => vec![Cell::new("value")],
-                }
-            )
-        );
+        table.set_titles(Row::new(match &data.headers {
+            TableHeader::NamedFields { fields } => fields
+                .iter()
+                .map(|f| Cell::new(f).style_spec("bFc"))
+                .collect(),
+            TableHeader::SingleUnnamedColumn => vec![Cell::new("value")],
+        }));
 
         // build colorize map
         let colorize: HashMap<usize, Vec<&ColorizeSpec>> = match &data.headers {
@@ -194,13 +202,11 @@ impl Printer for PlainTextTablePrinter {
                 let formatted = formatted.as_str();
                 let cell = Cell::new(formatted);
                 let cell = match colorize.get(&idx) {
-                    Some(styles) => {
-                        match styles.iter().find(|s| s.value == *formatted) {
-                            Some(style) => cell.style_spec(style.style.as_str()),
-                            None => cell
-                        }
-                    }
-                    _ => cell
+                    Some(styles) => match styles.iter().find(|s| s.value == *formatted) {
+                        Some(style) => cell.style_spec(style.style.as_str()),
+                        None => cell,
+                    },
+                    _ => cell,
                 };
 
                 row.add_cell(cell);
@@ -210,19 +216,14 @@ impl Printer for PlainTextTablePrinter {
 
         match &self.format {
             PlainTextTableFormat::Default => table.set_format(*format::consts::FORMAT_BOX_CHARS),
-            PlainTextTableFormat::Markdown => {
-                table.set_format(
-                    FormatBuilder::new()
-                        .padding(1, 1)
-                        .separator(
-                            LinePosition::Title,
-                            LineSeparator::new('-', '|', '|', '|'),
-                        )
-                        .column_separator('|')
-                        .borders('|')
-                        .build()
-                )
-            }
+            PlainTextTableFormat::Markdown => table.set_format(
+                FormatBuilder::new()
+                    .padding(1, 1)
+                    .separator(LinePosition::Title, LineSeparator::new('-', '|', '|', '|'))
+                    .column_separator('|')
+                    .borders('|')
+                    .build(),
+            ),
         }
 
         table.printstd();
@@ -231,7 +232,7 @@ impl Printer for PlainTextTablePrinter {
 }
 
 pub struct HtmlTablePrinter {
-    format: HtmlTableFormat
+    format: HtmlTableFormat,
 }
 
 impl HtmlTablePrinter {
@@ -249,13 +250,11 @@ const BOOTSTRAP_CDN: &str = r#"
 "#;
 
 impl Printer for HtmlTablePrinter {
-    fn print(&self, data: &JsonTable) -> GenericResult<()> {
+    fn print(&self, data: &JsonTable) -> anyhow::Result<()> {
         let mut result = String::new();
 
         match self.format {
-            HtmlTableFormat::Raw => {
-                result.push_str("<table>")
-            }
+            HtmlTableFormat::Raw => result.push_str("<table>"),
             HtmlTableFormat::Styled => {
                 result.push_str(BOOTSTRAP_CDN);
                 result.push_str(r#"<table class="table table-bordered table-hover">"#)
@@ -270,7 +269,7 @@ impl Printer for HtmlTablePrinter {
                     result.push_str(format!("<th>{}</th>", field).as_str())
                 }
             }
-            TableHeader::SingleUnnamedColumn => result.push_str("<th>Value</th>")
+            TableHeader::SingleUnnamedColumn => result.push_str("<th>Value</th>"),
         }
         result.push_str("</tr>");
 
@@ -283,7 +282,7 @@ impl Printer for HtmlTablePrinter {
                 result.push_str(format!("<td><pre>{}</pre></td>", formatted).as_str())
             }
             result.push_str("</tr>");
-        };
+        }
 
         result.push_str("</table>");
 
@@ -292,4 +291,3 @@ impl Printer for HtmlTablePrinter {
         Ok(())
     }
 }
-

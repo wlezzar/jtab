@@ -1,31 +1,48 @@
+extern crate core;
+
 use std::error::Error;
 use std::io;
 use std::str::FromStr;
 
+use anyhow::bail;
 use structopt::StructOpt;
 
 use printer::{PlainTextTablePrinter, Printer};
-use reader::{OneShotValueReader, StreamingValueReader, ValueReader};
+use reader::{OneShotJsonReader, StreamingJsonReader, ValueReader};
 
-use crate::printer::{ColorizeSpec, HtmlTableFormat, HtmlTablePrinter, JsonTable, PlainTextTableFormat, TableFormat, TableHeader};
+use crate::printer::{
+    ColorizeSpec, HtmlTableFormat, HtmlTablePrinter, JsonTable, PlainTextTableFormat, TableFormat,
+    TableHeader,
+};
+use crate::reader::CsvReader;
 
 mod printer;
 mod reader;
-mod table;
 
 #[derive(Debug, StructOpt)]
 #[structopt(about = "Print any json data as a table from the command line")]
 struct Command {
-    #[structopt(long, help = "Expect one json per line")]
+    #[structopt(long, help = "Deprecated: use '--input jsonl' instead")]
     streaming: bool,
 
     #[structopt(long, short, help = "Select a subset of fields")]
     fields: Option<Vec<String>>,
 
-    #[structopt(long, short, help = "Add a color spec to a column in the form of: 'col:value:spec'")]
+    #[structopt(long = "--input", short, help = "Format of the input data", default_value = "json")]
+    input_format: InputFormat,
+
+    #[structopt(
+    long,
+    short,
+    help = "Add a color spec to a column in the form of: 'col:value:spec'"
+    )]
     colorize: Vec<String>,
 
-    #[structopt(long, default_value = "default", help = "You can use 'default', 'markdown', 'html' or 'html-raw'")]
+    #[structopt(
+    long,
+    default_value = "default",
+    help = "You can use 'default', 'markdown', 'html' or 'html-raw'"
+    )]
     format: TableFormat,
 
     #[structopt(long, help = "Limit the number of printed elements")]
@@ -41,36 +58,65 @@ impl FromStr for TableFormat {
             "markdown" => Ok(TableFormat::PlainText(PlainTextTableFormat::Markdown)),
             "html" => Ok(TableFormat::Html(HtmlTableFormat::Styled)),
             "html-raw" => Ok(TableFormat::Html(HtmlTableFormat::Raw)),
-            _ => Err(format!("unknown format: {}", s))
+            _ => Err(format!("unknown format: {}", s)),
         }
     }
 }
 
-type GenericResult<T> = Result<T, Box<dyn Error>>;
+#[derive(Debug)]
+enum InputFormat {
+    Json,
+    JsonLines,
+    Csv,
+}
 
-fn main() -> GenericResult<()> {
+impl FromStr for InputFormat {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(
+            match s {
+                "json" => InputFormat::Json,
+                "jsonl" => InputFormat::JsonLines,
+                "csv" => InputFormat::Csv,
+                _ => bail!("Unknown input format: {}", s),
+            }
+        )
+    }
+}
+
+
+fn main() -> anyhow::Result<()> {
     let command: Command = Command::from_args();
     let stdin = io::stdin();
 
-    let data =
-        if command.streaming {
-            StreamingValueReader::new(stdin.lock()).read_value(command.take)?
-        } else {
-            OneShotValueReader::new(stdin).read_value(command.take)?
-        };
+    if command.streaming {
+        bail!("'--streaming' is deprecated. Use '--input jsonl' instead")
+    }
 
-    let colorize: Vec<_> =
-        command.colorize.iter().map(|c| ColorizeSpec::parse(c)).collect::<Result<_, _>>()?;
+    let data = match command.input_format {
+        InputFormat::Json => OneShotJsonReader::new(stdin).read_value(command.take)?,
+        InputFormat::JsonLines => StreamingJsonReader::new(stdin.lock()).read_value(command.take)?,
+        InputFormat::Csv => CsvReader::new(stdin.lock(), true).read_value(command.take)?,
+    };
+
+    let colorize: Vec<_> = command
+        .colorize
+        .iter()
+        .map(|c| ColorizeSpec::parse(c))
+        .collect::<Result<_, _>>()?;
 
     let given_headers = match command.fields {
         Some(fields) => Some(TableHeader::NamedFields { fields }),
-        None => None
+        None => None,
     };
 
     let table = JsonTable::new(given_headers, &data);
 
     match command.format {
-        TableFormat::PlainText(format) => PlainTextTablePrinter::new(colorize, format).print(&table)?,
+        TableFormat::PlainText(format) => {
+            PlainTextTablePrinter::new(colorize, format).print(&table)?
+        }
         TableFormat::Html(format) => HtmlTablePrinter::new(format).print(&table)?,
     }
 
