@@ -65,3 +65,8 @@ distributions:
         platform: 'linux-x86_64'
       - path: '{{artifactsDir}}/{{distributionName}}-{{projectVersion}}-aarch64-unknown-linux-gnu.zip'
         platform: 'linux-aarch_64'
+
+packagers:
+  brew:
+    multiPlatform: true
+    active: RELEASE
