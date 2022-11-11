@@ -48,7 +48,7 @@ jobs:
         with:
           use-cross: ${{ matrix.job.use-cross }}
           command: build
-          args: --locked --release --target=${{ matrix.job.target }}
+          args: --release --target=${{ matrix.job.target }}
 
       - name: Assemble
         uses: jreleaser/release-action@v2
