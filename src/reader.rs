@@ -1,5 +1,3 @@
-
-
 use std::io::{BufRead, Read};
 
 use serde_json::{Map, Value};
@@ -68,14 +66,19 @@ impl<R: BufRead> ValueReader for StreamingJsonReader<R> {
 }
 
 pub struct CsvReader<R: BufRead> {
-    has_header: bool,
+    options: CsvReaderOptions,
     buf_read: R,
 }
 
+pub struct CsvReaderOptions {
+    pub has_header: bool,
+    pub delimiter: u8,
+}
+
 impl<R: BufRead> CsvReader<R> {
-    pub fn new(buf_read: R, has_header: bool) -> Self {
+    pub fn new(buf_read: R, options: CsvReaderOptions) -> Self {
         CsvReader {
-            has_header,
+            options,
             buf_read,
         }
     }
@@ -84,10 +87,11 @@ impl<R: BufRead> CsvReader<R> {
 impl<R: BufRead> ValueReader for CsvReader<R> {
     fn read_value(self, take: Option<usize>) -> anyhow::Result<Value> {
         let mut reader = csv::ReaderBuilder::default()
-            .has_headers(true)
+            .has_headers(self.options.has_header)
+            .delimiter(self.options.delimiter)
             .from_reader(self.buf_read);
 
-        let headers = if self.has_header {
+        let headers = if self.options.has_header {
             Some(reader.headers()?.clone())
         } else {
             None
@@ -123,7 +127,7 @@ impl<R: BufRead> ValueReader for CsvReader<R> {
 mod tests {
     use serde_json::json;
 
-    use crate::reader::{anyhow::Result, CsvReader};
+    use crate::reader::{anyhow::Result, CsvReader, CsvReaderOptions};
     use crate::ValueReader;
 
     #[test]
@@ -135,7 +139,10 @@ mod tests {
         ].join("\n");
 
         let mut rdr = CsvReader {
-            has_header: true,
+            options: CsvReaderOptions {
+                has_header: true,
+                delimiter: b',',
+            },
             buf_read: std::io::Cursor::new(data),
         };
 
