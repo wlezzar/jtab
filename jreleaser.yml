@@ -67,5 +67,7 @@ packagers:
   brew:
     multiPlatform: true
     active: RELEASE
+    skipTemplates:
+      - README.md.tpl
     tap:
       name: jtab
